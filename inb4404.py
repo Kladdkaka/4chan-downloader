@@ -2,7 +2,9 @@
 import requests
 import argparse
 import logging
-import os, re, time
+import os
+import re
+import time
 import fileinput
 from multiprocessing import Process
 
@@ -69,17 +71,17 @@ def download_thread(thread_link):
                         with open(copy_path, 'w') as f:
                             f.write(data)
                         ##################################################################################
-            except requests.HTTPError as err:
+            except requests.HTTPError as err:  # is this the right error thing xd
                 print(err)
                 time.sleep(10)
                 try:
                     load(thread_link)
-                except requests.HTTPError as err:
+                except requests.HTTPError as err:  # is this the right error thing xd
                     print(err)
                     log.info('%s 404\'d', thread_link)
                     break
                 continue
-            except Exception as err:  # wat
+            except Exception as err:  # is this the right error thing xd
                 print(err)
                 log.warning('something went wrong')
 

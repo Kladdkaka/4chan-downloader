@@ -1,7 +1,8 @@
 #!/usr/bin/python
-import urllib2, argparse, logging
+import requests
+import argparse
+import logging
 import os, re, time
-import httplib 
 import fileinput
 from multiprocessing import Process
 
@@ -9,9 +10,13 @@ log = logging.getLogger('inb4404')
 workpath = os.path.dirname(os.path.realpath(__file__))
 args = None
 
+media_regex = re.compile('(//i.4cdn.org/\w+/(\d+\.(?:jpg|png|gif|webm)))')
+
+
 def load(url):
-    req = urllib2.Request(url, headers={'User-Agent': '4chan Browser'})
-    return urllib2.urlopen(req).read()
+    r = requests.get(url, headers={'User-Agent': '4chan Browser'})
+    return r.text
+
 
 def main():
     global args
@@ -21,12 +26,13 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true', help='display board/thread as well')
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%I:%M:%S %p')    
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%I:%M:%S %p')
 
     if args.thread[0][:4].lower() == 'http':
         download_thread(args.thread[0])
     else:
         download_from_file(args.thread[0])
+
 
 def download_thread(thread_link):
     try:
@@ -39,7 +45,7 @@ def download_thread(thread_link):
 
         while True:
             try:
-                for link, img in list(set(re.findall('(\/\/i.4cdn.org/\w+\/(\d+\.(?:jpg|png|gif|webm)))', load(thread_link)))):
+                for link, img in list(set(media_regex.findall(load(thread_link)))):
                     img_path = directory + '/' + img
                     if not os.path.exists(img_path):
                         data = load('https:' + link)
@@ -63,38 +69,42 @@ def download_thread(thread_link):
                         with open(copy_path, 'w') as f:
                             f.write(data)
                         ##################################################################################
-            except urllib2.HTTPError, err:
+            except requests.HTTPError as err:
+                print(err)
                 time.sleep(10)
                 try:
-                    load(thread_link)    
-                except urllib2.HTTPError, err:
+                    load(thread_link)
+                except requests.HTTPError as err:
+                    print(err)
                     log.info('%s 404\'d', thread_link)
                     break
                 continue
-            except (urllib2.URLError, httplib.BadStatusLine, httplib.IncompleteRead):
+            except Exception as err:  # wat
+                print(err)
                 log.warning('something went wrong')
 
             if not args.verbose:
-                print '.'
+                print('.')
             else:
                 log.info('Nothing new was found at /' + board + '/' + thread)
             time.sleep(20)
     except KeyboardInterrupt:
         pass
 
+
 def download_from_file(filename):
     try:
         while True:
             processes = []
             for link in filter(None, [line.strip() for line in open(filename) if line[:4] == 'http']):
-                process = Process(target=download_thread, args=(link, ))
+                process = Process(target=download_thread, args=(link,))
                 process.start()
                 processes.append([process, link])
                 if args.verbose:
                     log.info('Started: ' + link)
-            
+
             if args.reload:
-                time.sleep(60 * 5) # 5 minutes
+                time.sleep(60 * 5)  # 5 minutes
                 links_to_remove = []
                 for process, link in processes:
                     if not process.is_alive():
@@ -104,16 +114,17 @@ def download_from_file(filename):
 
                 for link in links_to_remove:
                     for line in fileinput.input(filename, inplace=True):
-                        print line.replace(link, '-' + link),
+                        print(line.replace(link, '-' + link))
                     log.info('Marked as dead: ' + link)
                 if args.verbose:
-                    log.info('Reloading ' + args.thread[0]) # thread = filename in this case
-                                                            # reloading basically happens at the beginning of the while True loop
+                    log.info('Reloading ' + args.thread[0])  # thread = filename in this case
+                    # reloading basically happens at the beginning of the while True loop
             else:
                 break
 
-    except Exception, e:
+    except Exception as e:
         raise e
+
 
 if __name__ == '__main__':
     try:
